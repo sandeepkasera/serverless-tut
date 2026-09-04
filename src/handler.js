@@ -1,3 +1,5 @@
+const express = require('express');
+const serverless = require('serverless-http');
 const {
   DynamoDBClient,
   ScanCommand,
@@ -8,47 +10,40 @@ const {
 } = require('@aws-sdk/client-dynamodb');
 const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
 
-const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+const app = express();
+const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'ap-south-1' });
 const TABLE_NAME = process.env.TASKS_TABLE;
 
-function jsonResponse(statusCode, body) {
-  return {
-    statusCode,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Credentials': true,
-    },
-    body: JSON.stringify(body),
-  };
-}
+app.use(express.json());
 
-function generateId() {
-  return `task-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-}
+app.get('/health', (req, res) => {
+  res.json({
+    service: 'aws-serverless-task-api',
+    status: 'healthy',
+    region: process.env.AWS_REGION || 'ap-south-1',
+    timestamp: new Date().toISOString(),
+  });
+});
 
-async function listTasks() {
+app.get('/tasks', async (req, res) => {
   try {
     const command = new ScanCommand({ TableName: TABLE_NAME });
     const data = await client.send(command);
     const items = (data.Items || []).map((item) => unmarshall(item));
-
-    return jsonResponse(200, { items });
+    res.json({ items });
   } catch (error) {
     console.error('listTasks error:', error);
-    return jsonResponse(500, { message: 'Could not fetch tasks', error: error.message });
+    res.status(500).json({ message: 'Could not fetch tasks', error: error.message });
   }
-}
+});
 
-async function createTask(event) {
+app.post('/tasks', async (req, res) => {
   try {
-    const body = event.body ? JSON.parse(event.body) : {};
-    const title = body.title || 'Untitled task';
-    const description = body.description || '';
+    const { title, description } = req.body || {};
     const task = {
-      id: generateId(),
-      title,
-      description,
+      id: `task-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      title: title || 'Untitled task',
+      description: description || '',
       completed: false,
       createdAt: new Date().toISOString(),
     };
@@ -59,22 +54,16 @@ async function createTask(event) {
     });
 
     await client.send(command);
-
-    return jsonResponse(201, { message: 'Task created successfully', task });
+    res.status(201).json({ message: 'Task created successfully', task });
   } catch (error) {
     console.error('createTask error:', error);
-    return jsonResponse(500, { message: 'Could not create task', error: error.message });
+    res.status(500).json({ message: 'Could not create task', error: error.message });
   }
-}
+});
 
-async function getTask(event) {
+app.get('/tasks/:id', async (req, res) => {
   try {
-    const id = event.pathParameters?.id;
-
-    if (!id) {
-      return jsonResponse(400, { message: 'Task ID is required' });
-    }
-
+    const { id } = req.params;
     const command = new GetItemCommand({
       TableName: TABLE_NAME,
       Key: marshall({ id }),
@@ -82,37 +71,36 @@ async function getTask(event) {
 
     const data = await client.send(command);
     if (!data.Item) {
-      return jsonResponse(404, { message: 'Task not found' });
+      return res.status(404).json({ message: 'Task not found' });
     }
 
-    return jsonResponse(200, { task: unmarshall(data.Item) });
+    return res.json({ task: unmarshall(data.Item) });
   } catch (error) {
     console.error('getTask error:', error);
-    return jsonResponse(500, { message: 'Could not fetch task', error: error.message });
+    return res.status(500).json({ message: 'Could not fetch task', error: error.message });
   }
-}
+});
 
-async function updateTask(event) {
+app.put('/tasks/:id', async (req, res) => {
   try {
-    const id = event.pathParameters?.id;
-    const body = event.body ? JSON.parse(event.body) : {};
+    const { id } = req.params;
+    const existing = await client.send(
+      new GetItemCommand({
+        TableName: TABLE_NAME,
+        Key: marshall({ id }),
+      })
+    );
 
-    if (!id) {
-      return jsonResponse(400, { message: 'Task ID is required' });
+    if (!existing.Item) {
+      return res.status(404).json({ message: 'Task not found' });
     }
 
-    const existing = await getTask({ pathParameters: { id } });
-    const currentTask = existing.statusCode === 200 ? JSON.parse(existing.body).task : null;
-
-    if (!currentTask) {
-      return jsonResponse(404, { message: 'Task not found' });
-    }
-
+    const currentTask = unmarshall(existing.Item);
     const updatedTask = {
       ...currentTask,
-      title: body.title || currentTask.title,
-      description: body.description ?? currentTask.description,
-      completed: body.completed ?? currentTask.completed,
+      title: req.body.title || currentTask.title,
+      description: req.body.description ?? currentTask.description,
+      completed: req.body.completed ?? currentTask.completed,
       updatedAt: new Date().toISOString(),
     };
 
@@ -130,48 +118,31 @@ async function updateTask(event) {
     });
 
     const data = await client.send(command);
-    return jsonResponse(200, { message: 'Task updated successfully', task: unmarshall(data.Attributes) });
+    return res.json({ message: 'Task updated successfully', task: unmarshall(data.Attributes) });
   } catch (error) {
     console.error('updateTask error:', error);
-    return jsonResponse(500, { message: 'Could not update task', error: error.message });
+    return res.status(500).json({ message: 'Could not update task', error: error.message });
   }
-}
+});
 
-async function deleteTask(event) {
+app.delete('/tasks/:id', async (req, res) => {
   try {
-    const id = event.pathParameters?.id;
-
-    if (!id) {
-      return jsonResponse(400, { message: 'Task ID is required' });
-    }
-
+    const { id } = req.params;
     const command = new DeleteItemCommand({
       TableName: TABLE_NAME,
       Key: marshall({ id }),
     });
 
     await client.send(command);
-
-    return jsonResponse(200, { message: 'Task deleted successfully', id });
+    res.json({ message: 'Task deleted successfully', id });
   } catch (error) {
     console.error('deleteTask error:', error);
-    return jsonResponse(500, { message: 'Could not delete task', error: error.message });
+    res.status(500).json({ message: 'Could not delete task', error: error.message });
   }
-}
+});
 
-async function health() {
-  return jsonResponse(200, {
-    service: 'aws-serverless-task-api',
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-  });
-}
+app.use((req, res) => {
+  res.status(404).json({ message: 'Route not found' });
+});
 
-module.exports = {
-  health,
-  listTasks,
-  createTask,
-  getTask,
-  updateTask,
-  deleteTask,
-};
+module.exports.handler = serverless(app);

@@ -1,16 +1,18 @@
 service: aws-serverless-task-api
 
 frameworkVersion: '3'
+useDotenv: true
 
 provider:
   name: aws
   runtime: nodejs20.x
-  region: us-east-1
-  stage: ${opt:stage, 'dev'}
+  region: ${env:AWS_REGION, 'ap-south-1'}
+  stage: ${opt:stage, env:STAGE, 'dev'}
   memorySize: 512
   timeout: 10
   environment:
-    TASKS_TABLE: ${self:custom.tableName}
+    AWS_REGION: ${env:AWS_REGION, 'ap-south-1'}
+    TASKS_TABLE: ${env:TASKS_TABLE, self:custom.tableName}
   iam:
     role:
       statements:
@@ -25,58 +27,19 @@ provider:
           Resource: arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:custom.tableName}
 
 plugins:
+  - serverless-dotenv-plugin
   - serverless-offline
 
 custom:
   tableName: ${self:service}-${self:provider.stage}-tasks
 
 functions:
-  health:
-    handler: src/handler.health
+  api:
+    handler: src/handler.handler
     events:
       - http:
-          path: /health
-          method: get
-          cors: true
-
-  listTasks:
-    handler: src/handler.listTasks
-    events:
-      - http:
-          path: /tasks
-          method: get
-          cors: true
-
-  createTask:
-    handler: src/handler.createTask
-    events:
-      - http:
-          path: /tasks
-          method: post
-          cors: true
-
-  getTask:
-    handler: src/handler.getTask
-    events:
-      - http:
-          path: /tasks/{id}
-          method: get
-          cors: true
-
-  updateTask:
-    handler: src/handler.updateTask
-    events:
-      - http:
-          path: /tasks/{id}
-          method: put
-          cors: true
-
-  deleteTask:
-    handler: src/handler.deleteTask
-    events:
-      - http:
-          path: /tasks/{id}
-          method: delete
+          path: /{proxy+}
+          method: any
           cors: true
 
 resources:
