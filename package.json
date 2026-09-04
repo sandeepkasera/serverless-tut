@@ -1,0 +1,20 @@
+{
+  "name": "aws-serverless-task-api",
+  "version": "1.0.0",
+  "description": "Sample Node.js backend API deployed to AWS Lambda with Serverless Framework",
+  "main": "src/handler.js",
+  "scripts": {
+    "dev": "serverless offline --stage dev --httpPort 3000",
+    "deploy": "serverless deploy --stage prod",
+    "remove": "serverless remove --stage prod",
+    "logs": "serverless logs -f listTasks --stage prod"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.322.0",
+    "@aws-sdk/util-dynamodb": "^3.322.0"
+  },
+  "devDependencies": {
+    "serverless": "^3.39.0",
+    "serverless-offline": "^13.3.3"
+  }
+}

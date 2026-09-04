@@ -1,0 +1,98 @@
+service: aws-serverless-task-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 10
+  environment:
+    TASKS_TABLE: ${self:custom.tableName}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:DescribeTable
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:custom.tableName}
+
+plugins:
+  - serverless-offline
+
+custom:
+  tableName: ${self:service}-${self:provider.stage}-tasks
+
+functions:
+  health:
+    handler: src/handler.health
+    events:
+      - http:
+          path: /health
+          method: get
+          cors: true
+
+  listTasks:
+    handler: src/handler.listTasks
+    events:
+      - http:
+          path: /tasks
+          method: get
+          cors: true
+
+  createTask:
+    handler: src/handler.createTask
+    events:
+      - http:
+          path: /tasks
+          method: post
+          cors: true
+
+  getTask:
+    handler: src/handler.getTask
+    events:
+      - http:
+          path: /tasks/{id}
+          method: get
+          cors: true
+
+  updateTask:
+    handler: src/handler.updateTask
+    events:
+      - http:
+          path: /tasks/{id}
+          method: put
+          cors: true
+
+  deleteTask:
+    handler: src/handler.deleteTask
+    events:
+      - http:
+          path: /tasks/{id}
+          method: delete
+          cors: true
+
+resources:
+  Resources:
+    TasksTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.tableName}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        SSESpecification:
+          SSEEnabled: true
