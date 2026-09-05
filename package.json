@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Sample Node.js backend API deployed to AWS Lambda with Express and Serverless Framework",
   "main": "src/handler.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "serverless offline --stage dev --httpPort 3000",
     "deploy": "serverless deploy --stage prod",
