@@ -31,14 +31,59 @@ plugins:
 
 custom:
   tableName: ${self:service}-${self:provider.stage}-tasks
+  dotenv:
+    include:
+      - STAGE
+      - TASKS_TABLE
+      - NODE_ENV
 
 functions:
-  api:
-    handler: src/handler.handler
+  health:
+    handler: src/health.health
     events:
       - http:
-          path: /{proxy+}
-          method: any
+          path: /health
+          method: get
+          cors: true
+
+  listTasks:
+    handler: src/tasks.listTasks
+    events:
+      - http:
+          path: /tasks
+          method: get
+          cors: true
+
+  createTask:
+    handler: src/tasks.createTask
+    events:
+      - http:
+          path: /tasks
+          method: post
+          cors: true
+
+  getTask:
+    handler: src/tasks.getTask
+    events:
+      - http:
+          path: /tasks/{id}
+          method: get
+          cors: true
+
+  updateTask:
+    handler: src/tasks.updateTask
+    events:
+      - http:
+          path: /tasks/{id}
+          method: put
+          cors: true
+
+  deleteTask:
+    handler: src/tasks.deleteTask
+    events:
+      - http:
+          path: /tasks/{id}
+          method: delete
           cors: true
 
 resources:
